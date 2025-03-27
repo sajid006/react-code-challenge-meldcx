@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Shape, ShapeColor, GridCell } from "./types";
-import { GRID_ROWS, GRID_COLS, SHAPE_CHANCE, SQUARE_MOVE_INTERVAL } from "./constants";
+import { GRID_ROWS, GRID_COLS, SHAPE_CHANCE, SQUARE_MOVE_INTERVAL, MAX_ATTEMPTS } from "./constants";
 import { renderShape } from "./utils";
 
 const App: React.FC = () => {
@@ -11,7 +11,7 @@ const App: React.FC = () => {
   const [capturedImage, setCapturedImage] = useState<string>("");
 
   // Step in the CAPTCHA flow: "video" -> "selectShapes" -> "result"
-  const [captchaStep, setCaptchaStep] = useState<"video" | "selectShapes" | "result">("video");
+  const [captchaStep, setCaptchaStep] = useState<"video" | "selectShapes" | "result" | "blocked">("video");
 
   // Randomly chosen shape that the user must select
   const [targetShape, setTargetShape] = useState<Shape>("triangle");
@@ -25,6 +25,10 @@ const App: React.FC = () => {
 
   // The final result of the CAPTCHA (true = pass, false = fail)
   const [captchaResult, setCaptchaResult] = useState<boolean | null>(null);
+
+  // Track the number of validation attempts
+  const [attemptCount, setAttemptCount] = useState<number>(0);
+
 
   // UseEffect: Access user camera
   useEffect(() => {
@@ -172,23 +176,44 @@ const App: React.FC = () => {
     }
 
     setCaptchaResult(isCorrect);
+    // Increase attempt count on failure
+    if (!isCorrect) {
+      setAttemptCount((prev) => prev + 1);
+      // If maximum attempts reached, block the user
+      if (attemptCount + 1 >= MAX_ATTEMPTS) {
+        setCaptchaStep("blocked");
+        return;
+      }
+    }
     setCaptchaStep("result");
+  };
+
+  // Function to allow user to retry the CAPTCHA validation flow
+  const handleRetry = () => {
+    // Reset state for a new attempt; note that attemptCount is not reset
+    setCaptchaResult(null);
+    setGridCells([]);
+    setCapturedImage("");
+    setCaptchaStep("video");
   };
 
 
   // Render element
   return (
     <div style={{ margin: "20px" }}>
-      <h1>Custom CAPTCHA Demo (Task 2)</h1>
+      <h1>Custom CAPTCHA Demo (Task 3)</h1>
 
       {captchaStep === "video" && (
         <div>
-          <p>1) Position your face in front of the camera and wait for the box to move.</p>
+          <p>Position your face in front of the camera and wait for the box to move.</p>
           <video ref={videoRef} style={{ width: "400px", height: "300px", backgroundColor: "#000" }} />
+          {/* 
+            Bounding box overlay (absolute positioning).
+          */}
           <div
             style={{
               position: "relative",
-              top: `-${300 - boxPos.top}px`,
+              top: `-${300 - boxPos.top}px`,   // Basic example offset
               left: `${boxPos.left}px`,
               width: `${boxPos.size}px`,
               height: `${boxPos.size}px`,
@@ -204,7 +229,7 @@ const App: React.FC = () => {
       {captchaStep === "selectShapes" && (
         <div>
           <p>
-            2) We captured your image. Now select all <strong>{targetColor} {targetShape}</strong>(s) in the grid below, then click "Validate".
+            We captured your image. Now select all <strong>{targetColor} {targetShape}</strong>(s) in the grid below, then click "Validate".
           </p>
           <div style={{ position: "relative" }}>
             {/* Display the captured image as background */}
@@ -225,13 +250,14 @@ const App: React.FC = () => {
                 display: "grid",
                 gridTemplateRows: `repeat(${GRID_ROWS}, 1fr)`,
                 gridTemplateColumns: `repeat(${GRID_COLS}, 1fr)`,
-                pointerEvents: "none",
+                pointerEvents: "none", // So the user can't drag the bounding box
               }}
             >
               {gridCells.map((cell) => (
                 <div
                   key={cell.id}
                   onClick={(e) => {
+                    // We want to allow cell clicks, so we override pointerEvents
                     e.stopPropagation();
                     handleCellClick(cell.id);
                   }}
@@ -242,7 +268,7 @@ const App: React.FC = () => {
                     justifyContent: "center",
                     cursor: "pointer",
                     backgroundColor: cell.isSelected ? "rgba(0, 255, 0, 0.3)" : "transparent",
-                    pointerEvents: "auto",
+                    pointerEvents: "auto", // re-enable for the cell itself
                   }}
                 >
                   {cell.hasShape && cell.shape && cell.color && renderShape(cell.shape, cell.color)}
@@ -257,11 +283,23 @@ const App: React.FC = () => {
 
       {captchaStep === "result" && (
         <div>
-          <p>
-            3) {captchaResult
-              ? "Congratulations! You passed the CAPTCHA."
-              : "Sorry, that was incorrect. You failed the CAPTCHA."}
-          </p>
+          {captchaResult ? (
+            <p>Congratulations! You passed the CAPTCHA.</p>
+          ) : (
+            <div>
+              <p>Sorry, that was incorrect.</p>
+              <p>
+                Attempts: {attemptCount} / {MAX_ATTEMPTS}
+              </p>
+              <button onClick={handleRetry}>Retry</button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {captchaStep === "blocked" && (
+        <div>
+          <p>You have exceeded the maximum number of attempts. The CAPTCHA is now blocked.</p>
         </div>
       )}
 
@@ -270,6 +308,5 @@ const App: React.FC = () => {
     </div>
   );
 };
-
 
 export default App;
