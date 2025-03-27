@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Shape, GridCell } from "./types";
+import { Shape, ShapeColor, GridCell } from "./types";
 import { GRID_ROWS, GRID_COLS, SHAPE_CHANCE, SQUARE_MOVE_INTERVAL } from "./constants";
 import { renderShape } from "./utils";
 
@@ -15,6 +15,7 @@ const App: React.FC = () => {
 
   // Randomly chosen shape that the user must select
   const [targetShape, setTargetShape] = useState<Shape>("triangle");
+  const [targetColor, setTargetColor] = useState<ShapeColor>("red");
 
   // Tracks bounding box position (top, left, size in pixels)
   const [boxPos, setBoxPos] = useState({ top: 50, left: 50, size: 150 });
@@ -94,10 +95,12 @@ const App: React.FC = () => {
 
     // Generate the random shapes for the next step
     const shapeToFind = randomShape();
+    const colorToFind = randomColor();
     setTargetShape(shapeToFind);
+    setTargetColor(colorToFind);
 
     // Create the grid for the bounding box area
-    const cells = createGrid(GRID_ROWS, GRID_COLS, shapeToFind);
+    const cells = createGrid(GRID_ROWS, GRID_COLS);
     setGridCells(cells);
 
     // Switch to the shape selection step
@@ -105,7 +108,7 @@ const App: React.FC = () => {
   };
 
   // Function to Generate grid cells
-  const createGrid = (rows: number, cols: number, shapeToFind: Shape): GridCell[] => {
+  const createGrid = (rows: number, cols: number): GridCell[] => {
     const totalCells = rows * cols;
     const newGrid: GridCell[] = [];
     // Randomly choose shapes in half of the cells or so
@@ -113,11 +116,14 @@ const App: React.FC = () => {
       // Decide whether this cell will have a shape
       const hasShape = Math.random() < SHAPE_CHANCE; // ~50% chance
       // If it has a shape, choose from the three shapes randomly
-      const randomShapeValue: Shape = randomShape();
+      const cellShape = hasShape ? randomShape() : null;
+      const cellColor = hasShape ? randomColor() : null;
+
       newGrid.push({
         id: i,
         hasShape,
-        shape: hasShape ? randomShapeValue : null,
+        shape: cellShape,
+        color: cellColor,
         isSelected: false,
       });
     }
@@ -128,6 +134,12 @@ const App: React.FC = () => {
   const randomShape = (): Shape => {
     const shapes: Shape[] = ["triangle", "square", "circle"];
     return shapes[Math.floor(Math.random() * shapes.length)];
+  };
+
+  //Function to randomly choose a color
+  const randomColor = (): ShapeColor => {
+    const colors: ShapeColor[] = ["red", "green", "blue"];
+    return colors[Math.floor(Math.random() * colors.length)];
   };
 
   // Handler: User clicks a cell to select/unselect
@@ -142,14 +154,18 @@ const App: React.FC = () => {
   // Validation: Check if user selected all cells with the target shape
   const handleValidate = () => {
     let isCorrect = true;
+
     for (const cell of gridCells) {
-      // If cell has the target shape but wasn't selected -> fail
-      if (cell.hasShape && cell.shape === targetShape && !cell.isSelected) {
+      // The correct cell is one that has the target shape and color
+      const cellIsTarget = cell.shape === targetShape && cell.color === targetColor;
+
+      // If it's a target cell but not selected -> fail
+      if (cellIsTarget && !cell.isSelected) {
         isCorrect = false;
         break;
       }
-      // If cell does NOT have the target shape but was selected -> fail
-      if ((cell.shape !== targetShape) && cell.isSelected) {
+      // If it's not a target cell but is selected -> fail
+      if (!cellIsTarget && cell.isSelected) {
         isCorrect = false;
         break;
       }
@@ -163,19 +179,16 @@ const App: React.FC = () => {
   // Render element
   return (
     <div style={{ margin: "20px" }}>
-      <h1>Custom CAPTCHA Demo</h1>
+      <h1>Custom CAPTCHA Demo (Task 2)</h1>
 
       {captchaStep === "video" && (
         <div>
           <p>1) Position your face in front of the camera and wait for the box to move.</p>
           <video ref={videoRef} style={{ width: "400px", height: "300px", backgroundColor: "#000" }} />
-          {/* 
-            Bounding box overlay (absolute positioning).
-          */}
           <div
             style={{
               position: "relative",
-              top: `-${300 - boxPos.top}px`,   // Basic example offset
+              top: `-${300 - boxPos.top}px`,
               left: `${boxPos.left}px`,
               width: `${boxPos.size}px`,
               height: `${boxPos.size}px`,
@@ -190,7 +203,9 @@ const App: React.FC = () => {
 
       {captchaStep === "selectShapes" && (
         <div>
-          <p>2) We captured your image. Now select all <strong>{targetShape}</strong>(s) in the grid below, then click "Validate".</p>
+          <p>
+            2) We captured your image. Now select all <strong>{targetColor} {targetShape}</strong>(s) in the grid below, then click "Validate".
+          </p>
           <div style={{ position: "relative" }}>
             {/* Display the captured image as background */}
             <img
@@ -210,14 +225,13 @@ const App: React.FC = () => {
                 display: "grid",
                 gridTemplateRows: `repeat(${GRID_ROWS}, 1fr)`,
                 gridTemplateColumns: `repeat(${GRID_COLS}, 1fr)`,
-                pointerEvents: "none", // So the user can't drag the bounding box
+                pointerEvents: "none",
               }}
             >
               {gridCells.map((cell) => (
                 <div
                   key={cell.id}
                   onClick={(e) => {
-                    // We want to allow cell clicks, so we override pointerEvents
                     e.stopPropagation();
                     handleCellClick(cell.id);
                   }}
@@ -228,10 +242,10 @@ const App: React.FC = () => {
                     justifyContent: "center",
                     cursor: "pointer",
                     backgroundColor: cell.isSelected ? "rgba(0, 255, 0, 0.3)" : "transparent",
-                    pointerEvents: "auto", // re-enable for the cell itself
+                    pointerEvents: "auto",
                   }}
                 >
-                  {cell.hasShape && cell.shape && renderShape(cell.shape)}
+                  {cell.hasShape && cell.shape && cell.color && renderShape(cell.shape, cell.color)}
                 </div>
               ))}
             </div>
@@ -256,5 +270,6 @@ const App: React.FC = () => {
     </div>
   );
 };
+
 
 export default App;
